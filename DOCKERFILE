@@ -14,9 +14,6 @@ RUN useradd -m appuser
 RUN chown -R appuser:appuser /app
 USER appuser
 
-RUN touch /app/rooms.json && chmod 666 /app/rooms.json
-
 EXPOSE 5000
 
-# Command to run the application
-CMD ["python", "webrtc.py"]
+CMD ["python", "-c", "from eventlet import wsgi; import eventlet; import webrtc; eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 5000)), webrtc.app)"]
