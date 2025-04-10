@@ -5,6 +5,7 @@ import uuid
 import json
 import logging
 import time
+import threading, random
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -27,12 +28,29 @@ def load_rooms():
         try:
             with open(ROOMS_FILE, 'r') as f:
                 rooms.update(json.load(f))
+                for room_id in list(rooms.keys()):
+                    if 'peers' not in rooms[room_id]:
+                        rooms[room_id]['peers'] = []
+                    if 'created_at' not in rooms[room_id]:
+                        rooms[room_id]['created_at'] = time.time()
+                    if 'peer_data' not in rooms[room_id]:
+                        rooms[room_id]['peer_data'] = []
         except json.JSONDecodeError:
-            pass
+            rooms = {}
+            app.logger.warning(f"Invalid JSON in {ROOMS_FILE}, starting with empty rooms")
+
 
 def save_rooms():
+    rooms_to_save = {}
+    for room_id, room_data in rooms.items():
+        rooms_to_save[room_id] = {
+            'peers': room_data.get('peers', []),
+            'created_at': room_data.get('created_at', time.time()),
+            'peer_data': room_data.get('peer_data', [])
+        }
     with open(ROOMS_FILE, 'w') as f:
-        json.dump(rooms, f)
+        json.dump(rooms_to_save, f)
+    app.logger.debug(f"Saved {len(rooms)} rooms to {ROOMS_FILE}")
 
 load_rooms()
 
@@ -181,40 +199,93 @@ def handle_heartbeat(data):
     
     if room_id in rooms and peer_id:
         # Update last seen timestamp
+        peer_found = False
         for peer_data in rooms[room_id].get('peer_data', []):
             if peer_data.get('peer_id') == peer_id:
                 peer_data['last_seen'] = time.time()
+                peer_found = True
                 break
         
-        # Clean up peers that haven't been seen for 10 seconds
-        now = time.time()
-        disconnected_peers = []
+        # Add peer data if not found (should not normally happen)
+        if not peer_found and peer_id in rooms[room_id]['peers']:
+            if 'peer_data' not in rooms[room_id]:
+                rooms[room_id]['peer_data'] = []
+            rooms[room_id]['peer_data'].append({
+                'peer_id': peer_id,
+                'socket_id': request.sid,
+                'last_seen': time.time()
+            })
         
+        # Occasionally run cleanup (1% chance)
+        if random.random() < 0.01:
+            cleanup_rooms()
+        
+        emit('active_peers', {'peers': rooms[room_id]['peers']})
+
+def cleanup_rooms():
+    """Remove inactive peers and empty rooms"""
+    now = time.time()
+    rooms_removed = 0
+    peers_removed = 0
+    
+    for room_id in list(rooms.keys()):
+        if 'peer_data' not in rooms[room_id]:
+            rooms[room_id]['peer_data'] = []
+            
+        disconnected_peers = []
         for peer_data in list(rooms[room_id].get('peer_data', [])):
-            if now - peer_data.get('last_seen', 0) > 5:
+            if now - peer_data.get('last_seen', 0) > 30:  # 30 seconds timeout
                 peer_id = peer_data.get('peer_id')
-                if peer_id in rooms[room_id]['peers']:
+                if peer_id and peer_id in rooms[room_id]['peers']:
                     rooms[room_id]['peers'].remove(peer_id)
                     disconnected_peers.append(peer_id)
+                    peers_removed += 1
                 rooms[room_id]['peer_data'].remove(peer_data)
         
         # Notify about disconnected peers
         for peer_id in disconnected_peers:
-            emit('peer_disconnected', {'peer_id': peer_id}, to=room_id)
+            socketio.emit('peer_disconnected', {'peer_id': peer_id}, to=room_id)
         
+        # Remove empty rooms or rooms older than 1 hour
+        if not rooms[room_id]['peers'] or (now - rooms[room_id].get('created_at', 0) > 3600):
+            del rooms[room_id]
+            rooms_removed += 1
+    
+    if peers_removed > 0 or rooms_removed > 0:
+        app.logger.info(f"Cleanup: removed {peers_removed} inactive peers and {rooms_removed} empty/old rooms")
         save_rooms()
-        
-        # Return active peers
-        emit('active_peers', {'peers': rooms[room_id]['peers']})
+    
+    return peers_removed, rooms_removed
+
+
+def schedule_cleanup():
+    """Run cleanup every minute"""
+    while True:
+        time.sleep(60)  
+        try:
+            cleanup_rooms()
+        except Exception as e:
+            app.logger.error(f"Error in scheduled cleanup: {str(e)}")
+
 
 if __name__ == '__main__':
     try:
+        # Start background cleanup thread
+        cleanup_thread = threading.Thread(target=schedule_cleanup, daemon=True)
+        cleanup_thread.start()
+        
+        # Add a startup message with cleanup info
+        app.logger.info("Starting server with automatic room/peer cleanup")
+        
         socketio.run(app, host="0.0.0.0", port=5000, debug=True)
 
     except KeyboardInterrupt:
+        app.logger.info("Server stopping - clearing all rooms")
+        # Clear all rooms on shutdown
+        rooms.clear()
         with open(ROOMS_FILE, 'w') as f:
             json.dump({}, f)
-        app.logger.info("Server stopped by user.")
+        app.logger.info("Server stopped by user. All rooms cleared.")
 
     except Exception as e:
         app.logger.error(f"Error starting server: {str(e)}")

@@ -1,0 +1,22 @@
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY webrtc.py .
+COPY static/ ./static/
+COPY templates/ ./templates/
+COPY LICENSE README.md ./
+
+RUN useradd -m appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
+RUN touch /app/rooms.json && chmod 666 /app/rooms.json
+
+EXPOSE 5000
+
+# Command to run the application
+CMD ["python", "webrtc.py"]
