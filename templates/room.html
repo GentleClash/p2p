@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Sharing Room</title>
+    <link rel="stylesheet" href="../static/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>File Sharing Room</h1>
+            <div class="room-info">
+                <span>Room Code:</span>
+                <div class="room-code" id="roomCode"></div>
+                <button class="copy-btn" id="copyCodeBtn">Copy</button>
+            </div>
+            <div class="share-info">
+                <p>Invitation:</p>
+                <div class="share-link">
+                    <input type="text" id="shareLink" readonly value="">
+                    <button class="copy-btn" id="shareLinkBtn">Copy Link</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="participants">
+                <h2>Connected Peers</h2>
+                <ul class="peers-list" id="peersList">
+                    <li class="peer-item">
+                        <div class="peer-status"></div>
+                        <div>You (waiting for others to join)</div>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="shared-files">
+                <h2>Shared Files</h2>
+                <ul class="file-list" id="fileList">
+                    <li class="file-item" style="justify-content: center; font-style: italic; color: #666;">
+                        No files shared yet
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="file-drop" id="fileDrop">
+            <p>Drag and drop files here or click to select</p>
+            <p style="font-size: 40px;">📂</p>
+            <p style="font-size: 14px; color: #666;">Files are shared directly with other users in the room</p>
+            <input type="file" multiple class="file-input" id="fileInput">
+        </div>
+        
+        <div class="status" id="status">
+            Waiting for WebRTC connection...
+        </div>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+    
+    <script>
+        // Global variables
+        const roomId = "{{ room_id }}";
+        const peers = {};
+        let myPeerId = null;
+        const files = {};
+        let socket;
+        document.getElementById('roomCode').textContent = roomId;
+        console.log("Room ID:", roomId);
+    </script>
+    <script src="../static/index.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple WebRTC File Sharing</title>
+    <link rel="stylesheet" href="../static/homepage.css">
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>Simple WebRTC File Sharing</h1>
+            <p>Share files directly between browsers - no upload required!</p>
+            
+            <div class="room-controls">
+                <button id="createRoomBtn">Create Room</button>
+                <span style="margin: 0 10px;">or</span>
+                <input type="text" id="roomInput" placeholder="Enter room code">
+                <button id="joinRoomBtn">Join</button>
+            </div>
+            
+            <div id="roomLink" class="room-link">
+                <span id="roomLinkText"></span>
+                <button id="copyLinkBtn" class="copy-btn">Copy</button>
+            </div>
+            
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <div class="emoji">🚀</div>
+                <h3>Fast Transfer</h3>
+                <p>Direct browser-to-browser connection</p>
+            </div>
+            <div class="feature">
+                <div class="emoji">🔒</div>
+                <h3>Secure</h3>
+                <p>Files never pass through a server</p>
+            </div>
+            <div class="feature">
+                <div class="emoji">🔌</div>
+                <h3>No Setup</h3>
+                <p>Works without port forwarding</p>
+            </div>
+        </div>
+        
+        <div class="how-it-works card">
+            <h2>How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div>Create a room or join with a room code</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div>Share the room code with friends</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div>Select files to share directly</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div>Files transfer directly from browser to browser</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showStatus(message, isError = false) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.style.display = 'block';
+            
+            if (isError) {
+                statusElement.classList.add('error');
+                statusElement.classList.remove('success');
+            } else {
+                statusElement.classList.add('success');
+                statusElement.classList.remove('error');
+            }
+            
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 3000);
+        }
+        
+        document.getElementById('createRoomBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/create-room', {
+                    method: 'POST',
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to create room');
+                }
+                
+                const data = await response.json();
+                const roomId = data.room_id;
+                
+                console.log('Room created:', roomId);
+                
+                // Show and update the room link
+                const roomLink = document.getElementById('roomLink');
+                const roomLinkText = document.getElementById('roomLinkText');
+                const fullLink = `${window.location.origin}/join-room/${roomId}`;
+                
+                roomLinkText.textContent = fullLink;
+                roomLink.style.display = 'flex';
+                
+                // Redirect to the room
+                window.location.href = `/join-room/${roomId}`;
+            } catch (error) {
+                console.error('Error creating room:', error);
+                showStatus('Error creating room. Please try again.', true);
+            }
+        });
+        
+        document.getElementById('joinRoomBtn').addEventListener('click', () => {
+            const roomId = document.getElementById('roomInput').value.trim();
+            if (roomId) {
+                console.log('Joining room:', roomId);
+                window.location.href = `/join-room/${roomId}`;
+            } else {
+                showStatus('Please enter a room code', true);
+            }
+        });
+        
+        document.getElementById('copyLinkBtn').addEventListener('click', () => {
+            try {
+                const roomLinkText = document.getElementById('roomLinkText').textContent;
+                navigator.clipboard.writeText(roomLinkText)
+                    .then(() => {
+                        console.log('Link copied to clipboard');
+                        const copyBtn = document.getElementById('copyLinkBtn');
+                        copyBtn.textContent = 'Copied!';
+                        showStatus('Room link copied to clipboard!');
+                        setTimeout(() => {
+                            copyBtn.textContent = 'Copy';
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy:', err);
+                        showStatus('Failed to copy link', true);
+                    });
+            } catch (error) {
+                console.error('Error copying link:', error);
+                showStatus('Error copying link', true);
+            }
+        });
+    </script>
+</body>
+</html>
