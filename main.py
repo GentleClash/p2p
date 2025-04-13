@@ -10,6 +10,8 @@ import logging
 import time
 import asyncio
 import random
+import threading
+import requests
 
 app = FastAPI()
 sio = AsyncServer(async_mode='asgi', cors_allowed_origins="*")
@@ -31,6 +33,27 @@ logger = logging.getLogger(__name__)
 rooms = {}
 ROOMS_FILE = 'rooms.json'
 
+def keep_alive():
+    """
+    Pings the status endpoint every 14 minutes to keep the service alive.
+    Runs in a separate thread to avoid blocking the main event loop.
+    """
+    logger.info("Keep-alive thread function started")
+    url = "https://p2p-80my.onrender.com/status"
+    while True:
+        try:
+            logger.info("Sending keep-alive ping...")
+            response = requests.get(url, timeout=10)
+            logger.info(f"Keep-alive ping to {url}: status {response.status_code}")
+        except requests.RequestException as e:
+            logger.error(f"Keep-alive ping failed: {str(e)}")
+        
+        # Log before sleeping
+        logger.info(f"Keep-alive thread sleeping for 14 minutes")
+        # Sleep for 14 minutes (14 * 60 seconds)
+        time.sleep(14*60)
+
+        
 def load_rooms():
     global rooms
     if os.path.exists(ROOMS_FILE):
@@ -91,6 +114,11 @@ async def join_room(request: Request, room_id: str):
     except Exception as e:
         logger.error(f"Error rendering room.html: {str(e)}")
         return templates.TemplateResponse("error.html", {"request": request, "message": "An error occurred while loading the room."}), 500
+
+@app.get("/join-room")
+async def join_room_get(request: Request):
+    """Render the room join page"""
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/status")
 async def status():
@@ -284,6 +312,23 @@ async def lifespan(app):
     with open(ROOMS_FILE, 'w') as f:
         json.dump({}, f)
     logger.info("Server stopped. All rooms cleared.")
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Starting server with automatic room/peer cleanup (startup event)")
+    load_rooms()
+    asyncio.create_task(schedule_cleanup())
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Server shutting down - clearing all rooms")
+    rooms.clear()
+    with open(ROOMS_FILE, 'w') as f:
+        json.dump({}, f)
+    logger.info("Server stopped. All rooms cleared.")
+
 
 app.lifespan = lifespan
 
