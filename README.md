@@ -11,7 +11,7 @@ pip install -r requirements.txt
 ```
 3. Run the server
 ```bash
-python webrtc.py
+uvicorn main:app
 ```
 Or use Docker
 ```bash
