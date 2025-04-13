@@ -94,19 +94,18 @@ async def join_room(request: Request, room_id: str):
 
 @app.get("/status")
 async def status():
-    """Return health status and active rooms with peers"""
-    active_rooms = []
-    for room_id, room_data in rooms.items():
-        active_rooms.append({
-            "room_id": room_id,
-            "peer_count": len(room_data.get("peers", [])),
-            "peers": room_data.get("peers", []),
-            "created_at": room_data.get("created_at", 0)
-        })
+    """Return health status and active rooms count"""
+    room_count = len(rooms)
+    peer_count = sum(len(room_data.get("peers", [])) for room_data in rooms.values())
+    now = time.time()
+    room_ages = [now - room_data.get("created_at", now) for room_data in rooms.values()]
+    avg_room_age = sum(room_ages) / len(room_ages) if room_ages else 0
+    
     return {
         "status": "healthy",
-        "active_rooms_count": len(rooms),
-        "active_rooms": active_rooms
+        "active_rooms_count": room_count,
+        "total_peers_count": peer_count,
+        "avg_room_age_seconds": round(avg_room_age, 2)
     }
 
 @sio.event
