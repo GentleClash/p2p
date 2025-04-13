@@ -115,10 +115,6 @@ async def join_room(request: Request, room_id: str):
         logger.error(f"Error rendering room.html: {str(e)}")
         return templates.TemplateResponse("error.html", {"request": request, "message": "An error occurred while loading the room."}), 500
 
-@app.get("/join-room")
-async def join_room_get(request: Request):
-    """Render the room join page"""
-    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/status")
 async def status():

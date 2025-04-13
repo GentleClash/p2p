@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="../static/styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -16,14 +17,12 @@
                 <span>Room Code:</span>
                 <div class="room-code" id="roomCode"></div>
                 <button class="copy-btn" id="copyCodeBtn">Copy</button>
-            </div>
-            <div class="share-info">
-                <p>Invitation:</p>
-                <div class="share-link">
-                    <input type="text" id="shareLink" readonly value="">
-                    <button class="copy-btn" id="shareLinkBtn">Copy Link</button>
+                <div class="share-info">
+                    <button class="share-btn" id="shareBtn">Share Invitation</button>
                 </div>
             </div>
+            <!-- Add this before the closing body tag -->
+  </div>
         </div>
         
         <div class="panel">
@@ -70,7 +69,71 @@
         let socket;
         document.getElementById('roomCode').textContent = roomId;
         console.log("Room ID:", roomId);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const shareBtn = document.getElementById('shareBtn');
+            const sharePopup = document.getElementById('sharePopup');
+            const popupShareLink = document.getElementById('popupShareLink');
+            const popupCopyBtn = document.getElementById('popupCopyBtn');
+            const popupCloseBtn = document.getElementById('popupCloseBtn');            
+            // Set the share link value
+            const shareUrl = window.location.href;
+            popupShareLink.value = shareUrl;
+            
+            // Open popup when share button is clicked
+            function generateQRCode(url) {
+                const qrCanvas = document.getElementById('qrCode');
+                if (qrCanvas) {
+                    try {
+                    new QRious({
+                        element: qrCanvas,
+                        value: url,
+                        size: 200, 
+                        level: 'H',
+                        background: 'white',
+                    });
+                    } catch (error) {
+                    }
+                } else {
+                }
+              }
+            shareBtn.addEventListener('click', function() {
+              sharePopup.classList.add('active');
+              generateQRCode(shareUrl);
+            });
+            
+            // Close popup when close button is clicked
+            popupCloseBtn.addEventListener('click', function() {
+                
+              sharePopup.classList.remove('active');
+
+            });
+            
+            // Close popup when clicking outside the popup content
+            sharePopup.addEventListener('click', function(e) {
+              if (e.target === sharePopup) {
+                sharePopup.classList.remove('active');
+              }
+            });
+        });
+
     </script>
     <script src="../static/index.js" type="module"></script>
+        <div class="popup-overlay" id="sharePopup">
+            <div class="popup-content">
+                <h3>Share Invitation</h3>
+                <p>Share this link with others to invite them to your room:</p>
+            <div class="popup-link">
+                <input type="text" id="popupShareLink" readonly>
+            </div>
+            <div class="qr-container">
+                <canvas id="qrCode"></canvas>
+                <p>Scan with your phone camera</p>
+              </div>
+            <div class="popup-buttons">
+                <button id="popupCopyBtn">Copy</button>
+                <button id="popupCloseBtn">Close</button>
+            </div>
+        </div>
 </body>
 </html>
