@@ -87,8 +87,21 @@ export async function init() {
     document.getElementById('shareLinkBtn').addEventListener('click', () => {
         const shareLink = document.getElementById('shareLink');
         shareLink.select();
-        navigator.clipboard.writeText(shareLink.value)
-            .then(() => showToast('Link copied to clipboard!'));
+        try {
+            navigator.clipboard.writeText(shareLink.value)
+                .then(() => showToast('Link copied to clipboard!'))
+                .catch(err => {
+                    console.error("Failed to copy link:", err);
+                    // Fallback method
+                    document.execCommand('copy');
+                    showToast('Link copied to clipboard!');
+                });
+        } catch (error) {
+            console.error("Error copying link:", error);
+            // Fallback for browsers without clipboard API
+            document.execCommand('copy');
+            showToast('Link copied to clipboard!');
+        }
     });
     initWebSocket();
 }

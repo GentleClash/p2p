@@ -1,0 +1,96 @@
+{
+    "connection_results": [
+        {
+            "page_load_latency": 0.82,
+            "signaling_latency": 0.31,
+            "connection_time": 1.25
+        },
+        {
+            "page_load_latency": 0.76,
+            "signaling_latency": 0.29,
+            "connection_time": 1.14
+        },
+        {
+            "page_load_latency": 0.89,
+            "signaling_latency": 0.34,
+            "connection_time": 1.31
+        },
+        {
+            "page_load_latency": 0.8,
+            "signaling_latency": 0.3,
+            "connection_time": 1.21
+        }
+    ],
+    "results": [
+        {
+            "file_size": 1048576,
+            "transfer_rate": 7.4
+        },
+        {
+            "file_size": 5242880,
+            "transfer_rate": 8.2
+        },
+        {
+            "file_size": 10485760,
+            "transfer_rate": 9.1
+        },
+        {
+            "file_size": 1048576,
+            "transfer_rate": 7.9
+        },
+        {
+            "file_size": 5242880,
+            "transfer_rate": 8.0
+        },
+        {
+            "file_size": 10485760,
+            "transfer_rate": 8.9
+        }
+    ],
+    "reconnection_results": [
+        {
+            "reconnection_success": true,
+            "reconnection_time_ms": 830
+        },
+        {
+            "reconnection_success": true,
+            "reconnection_time_ms": 910
+        },
+        {
+            "reconnection_success": false,
+            "reconnection_time_ms": 0
+        },
+        {
+            "reconnection_success": true,
+            "reconnection_time_ms": 720
+        },
+        {
+            "reconnection_success": true,
+            "reconnection_time_ms": 780
+        }
+    ],
+    "signaling_results": [
+        {
+            "operation": "create_room",
+            "signaling_latency": 0.25
+        },
+        {
+            "operation": "concurrent_connections",
+            "concurrent_users": 100,
+            "success_rate": 97.4,
+            "avg_signaling_latency": 0.41
+        },
+        {
+            "operation": "concurrent_connections",
+            "concurrent_users": 500,
+            "success_rate": 92.8,
+            "avg_signaling_latency": 0.55
+        },
+        {
+            "operation": "concurrent_connections",
+            "concurrent_users": 1000,
+            "success_rate": 89.6,
+            "avg_signaling_latency": 0.73
+        }
+    ]
+}
