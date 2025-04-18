@@ -106,8 +106,11 @@ async def join_room(request: Request, room_id: str):
     """Join an existing room"""
     logger.info(f"Attempting to join room: {room_id}")
     if room_id not in rooms:
-        logger.warning(f"Room {room_id} not found")
-        return templates.TemplateResponse("error.html", {"request": request, "message": "Room not found. Please check the room code."}), 404
+        return templates.TemplateResponse(
+        "error.html", 
+        {"request": request, "message": "Room not found. Please check the room code."}, 
+        status_code=404
+    )
     try:
         logger.info(f"Rendering room.html for room: {room_id}")
         return templates.TemplateResponse("room.html", {"request": request, "room_id": room_id})

@@ -1,11 +1,12 @@
 import { handleFiles } from './file_transfer.js';
-import { showToast } from './ui.js';
+import { showToast, initDebugConsole } from './ui.js';
 import { initWebSocket } from './websocket.js';
 
 
 export async function init() {
     console.log("Initializing...");
     initWebSocket();
+    //initDebugConsole();
 
     try {
 

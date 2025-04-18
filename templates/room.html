@@ -69,6 +69,13 @@
         let socket;
         document.getElementById('roomCode').textContent = roomId;
         console.log("Room ID:", roomId);
+        const CONNECTION_STATES = {
+            DISCONNECTED: 'disconnected',
+            CONNECTING: 'connecting',
+            SIGNALING: 'signaling',
+            CONNECTED: 'connected',
+            ERROR: 'error'
+        };
 
         document.addEventListener('DOMContentLoaded', function() {
             const shareBtn = document.getElementById('shareBtn');

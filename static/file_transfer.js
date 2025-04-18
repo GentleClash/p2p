@@ -1,8 +1,6 @@
 import { broadcastFileList } from "./websocket.js";
-import { updateFileDownloadStatus, showToast, addFileToUI } from "./ui.js";
+import { updateFileDownloadStatus, showToast, addFileToUI, updateSenderFileStatus } from "./ui.js";
 import { initializePeerConnection } from "./peer.js";
-
-
 
 export function handleFiles(newFiles) {
     console.log("Handling files:", newFiles);
@@ -11,13 +9,13 @@ export function handleFiles(newFiles) {
     }
     for (const file of newFiles) {
         //const fileId = `${myPeerId}-${Date.now()}-${file.name}`;
-        const fileId = sanitizeFileName(`${myPeerId}-${Date.now()}-${file.name}`);  
+        const fileId = sanitizeFileName(`${myPeerId}-${Date.now()}-${file.name}`);
         files[fileId] = file;
-        addFileToUI(fileId, file.name, URL.createObjectURL(file), file.size);
+        files[fileId].downloaders = {};
+        addFileToUI(fileId, file.name, URL.createObjectURL(file), file.size, true, {});
         broadcastFileList();
     }
 }
-
 
 export function handleFileList(peerId, fileList) {
     console.log(`Received file list from peer ${peerId}:`, fileList);
@@ -26,7 +24,6 @@ export function handleFileList(peerId, fileList) {
         if (!peerFiles.some(f => f.fileId === fileInfo.fileId)) {
             fileInfo.size = fileInfo.size || 0;
             peerFiles.push(fileInfo);
-
         }
     });
     updateFileList();
@@ -85,7 +82,8 @@ export function updateFileList() {
             fileName: fileObj.name,
             url: url,
             size: fileObj.size || 0,
-            ownedByMe: true
+            ownedByMe: true,
+            downloaders: fileObj.downloaders || {}
         });
     });
 
@@ -122,7 +120,7 @@ export function updateFileList() {
     // Add files to UI
     allFiles.forEach(fileInfo => {
         if (fileInfo.ownedByMe) {
-            addFileToUI(fileInfo.fileId, fileInfo.fileName, fileInfo.url, fileInfo.size, true);
+            addFileToUI(fileInfo.fileId, fileInfo.fileName, fileInfo.url, fileInfo.size, true, fileInfo.downloaders);
         } else {
             // For peer files that don't have a URL yet
             const listItem = document.createElement('li');
@@ -166,10 +164,23 @@ export function handleFileRequest(peerId, fileId) {
 
     console.log(`Preparing to send file: ${file.name}, size: ${file.size} bytes`);
 
+    // Track downloaders for this file
+    if (!file.downloaders) {
+        file.downloaders = {};
+    }
+    file.downloaders[peerId] = {
+        status: 'starting',
+        progress: 0,
+        startTime: Date.now()
+    };
+
+    // Update UI to show someone is downloading this file
+    updateSenderFileStatus(fileId, file.downloaders);
+
     // Adding a slight delay to ensure connection is stable
     setTimeout(() => {
         sendFileToPeer(peerId, fileId, file);
-    }, 500);
+    }, 100);
 }
 
 export function requestFileFromPeer(peerId, fileId) {
@@ -308,6 +319,13 @@ export async function handleFileData(fileId, fileName, chunk, totalChunks, chunk
         // Update UI with progress
         updateFileDownloadStatus(fileId, `Downloading: ${files[fileId].receivedChunks}/${totalChunks} chunks (${(files[fileId].size / 1024).toFixed(2)} KB)`);
 
+        // Send progress update to the sender every 10% 
+        const progress = Math.round((files[fileId].receivedChunks / totalChunks) * 100);
+        // Send updates on 10% intervals
+        if (progress % 10 === 0) {
+            sendDownloadProgressUpdate(fileId, fileName, progress);
+        }
+
         // Check if file is complete
         if (files[fileId].receivedChunks === totalChunks) {
             console.log(`All ${totalChunks} chunks received for ${fileName}, assembling file...`);
@@ -327,47 +345,132 @@ export async function handleFileData(fileId, fileName, chunk, totalChunks, chunk
                 // Update UI
                 updateFileDownloadStatus(fileId, `Complete: ${(blob.size / 1024).toFixed(2)} KB`);
 
+                // Send completion notification to sender
+                sendDownloadProgressUpdate(fileId, fileName, 100, true);
+
                 // Show success message
                 showToast(`File "${fileName}" downloaded successfully!`);
             } catch (error) {
                 console.error(`Error creating file blob: ${error.message}`);
                 updateFileDownloadStatus(fileId, `Error: ${error.message}`);
+
+                // Send error notification to sender
+                sendDownloadProgressUpdate(fileId, fileName, -1, false, error.message);
             }
         }
     } catch (error) {
         console.error(`Error processing chunk ${chunkIndex} for file ${fileName}:`, error);
         updateFileDownloadStatus(fileId, `Error: ${error.message}`);
+
+        // Send error notification to sender
+        sendDownloadProgressUpdate(fileId, fileName, -1, false, error.message);
     }
 }
 
-export function sendFileToPeer(peerId, fileId, file) {
-    //console.log(`Sending file ${file.name} (ID: ${fileId}) to peer ${peerId}`);
+//send download progress to the sender
+function sendDownloadProgressUpdate(fileId, fileName, progress, completed = false, error = null) {
+    // Extract owner peer ID from fileId
+    const ownerPeerId = fileId.split('-')[0];
 
+    // Don't send update if we're the owner
+    if (ownerPeerId === myPeerId) return;
+
+    // Check if connection to owner exists
+    if (!peers[ownerPeerId] || !peers[ownerPeerId].connection) {
+        console.log(`No connection to file owner ${ownerPeerId}, can't send progress update`);
+        return;
+    }
+
+    try {
+        const message = JSON.stringify({
+            type: 'download-progress',
+            fileId: fileId,
+            fileName: fileName,
+            progress: progress,
+            downloaderId: myPeerId,
+            completed: completed,
+            error: error
+        });
+
+        peers[ownerPeerId].connection.send(message);
+    } catch (err) {
+        console.error(`Error sending progress update to file owner: ${err.message}`);
+    }
+}
+
+export function handleDownloadProgress(fileId, progress, downloaderId, completed, error) {
+
+    // Check if this is our file
+    const file = files[fileId];
+    if (!file) {
+        console.log(`File ${fileId} not found in our files, ignoring progress update`);
+        return;
+    }
+
+    // Initialize downloaders tracking if needed
+    if (!file.downloaders) {
+        file.downloaders = {};
+    }
+
+    // Update or initialize downloader status
+    if (!file.downloaders[downloaderId]) {
+        file.downloaders[downloaderId] = {
+            status: 'downloading',
+            progress: progress,
+            startTime: Date.now()
+        };
+    } else {
+        file.downloaders[downloaderId].progress = progress;
+
+        if (completed) {
+            file.downloaders[downloaderId].status = 'completed';
+            file.downloaders[downloaderId].completedTime = Date.now();
+        } else if (error) {
+            file.downloaders[downloaderId].status = 'error';
+            file.downloaders[downloaderId].error = error;
+        } else {
+            file.downloaders[downloaderId].status = 'downloading';
+        }
+    }
+
+    // Update UI to show download progress
+    updateSenderFileStatus(fileId, file.downloaders);
+}
+
+export function sendFileToPeer(peerId, fileId, file) {
     if (!peers[peerId] || !peers[peerId].connection) {
         console.error(`No connection to peer ${peerId}`);
         return;
     }
 
     const peer = peers[peerId].connection;
-    const chunkSize = 16384;
+    const chunkSize = 16384; // 16KB chunks
     const totalChunks = Math.ceil(file.size / chunkSize);
 
-    //console.log(`File will be sent in ${totalChunks} chunks (total: ${file.size} bytes)`);
-
-    // Track sent chunks
+    // Track sent chunks and queue
     const sentChunks = new Set();
     let completedChunks = 0;
+    const chunkQueue = [];
+    let sending = false;
 
-    // Maximum parallel transfers 
-    const maxParallel = 5;
+    const maxParallel = 4;
     let activeTransfers = 0;
 
-    function sendChunk(index) {
-        if (sentChunks.has(index) || index >= totalChunks) return;
+    // Update downloader status
+    if (!file.downloaders) file.downloaders = {};
+    file.downloaders[peerId] = {
+        status: 'downloading',
+        progress: 0,
+        startTime: Date.now()
+    };
+    updateSenderFileStatus(fileId, file.downloaders);
 
-        // Mark this chunk as being processed
-        sentChunks.add(index);
-        activeTransfers++;
+    // Function to process the next chunk in queue
+    function processQueue() {
+        if (sending || chunkQueue.length === 0) return;
+
+        sending = true;
+        const index = chunkQueue.shift();
 
         // Calculate chunk boundaries
         const start = index * chunkSize;
@@ -379,7 +482,7 @@ export function sendFileToPeer(peerId, fileId, file) {
         reader.onload = () => {
             try {
                 const arrayBuffer = reader.result;
-    
+
                 const message = {
                     type: 'file-data',
                     fileId: fileId,
@@ -389,64 +492,124 @@ export function sendFileToPeer(peerId, fileId, file) {
                 };
                 const metaBuffer = new TextEncoder().encode(JSON.stringify(message));
                 const separator = new Uint8Array([0]);
-
-                //We can extract on receiving side by splitting the buffer
                 const fullMessage = new Blob([metaBuffer, separator, arrayBuffer]);
 
-                // Send to peer
-                //peer.send(JSON.stringify(message));
-                peer.send(fullMessage);
+                // Send to peer with backpressure handling
+                try {
+                    peer.send(fullMessage);
 
-                // Update counters
-                completedChunks++;
-                activeTransfers--;
+                    // Update counters
+                    completedChunks++;
+                    activeTransfers--;
 
-                // Log progress periodically
-                if (completedChunks % 10 === 0 || completedChunks === totalChunks) {
-                    console.log(`Sent ${completedChunks}/${totalChunks} chunks (${Math.round((completedChunks / totalChunks) * 100)}%)`);
-                }
+                    // Log progress periodically
+                    const progressPercentage = Math.round((completedChunks / totalChunks) * 100);
+                    if (progressPercentage % 10 === 0 || completedChunks === totalChunks) {
+                        console.log(`Sent ${progressPercentage}% of ${file.name}`);
 
-                // Check if we're done
-                if (completedChunks === totalChunks) {
-                    console.log(`Finished sending file ${file.name}`);
-                    return;
-                }
-
-                // Start next chunk if we have capacity
-                if (activeTransfers < maxParallel) {
-                    // Find next unsent chunk
-                    let nextIndex = 0;
-                    while (nextIndex < totalChunks && sentChunks.has(nextIndex)) {
-                        nextIndex++;
+                        // Update downloader progress in our tracking
+                        if (file.downloaders && file.downloaders[peerId]) {
+                            file.downloaders[peerId].progress = progressPercentage;
+                            updateSenderFileStatus(fileId, file.downloaders);
+                        }
                     }
 
-                    if (nextIndex < totalChunks) {
-                        setTimeout(() => sendChunk(nextIndex), 0);
+                    // Check if we're done
+                    if (completedChunks === totalChunks) {
+                        console.log(`Finished sending file ${file.name}`);
+
+                        // Update downloader status to completed
+                        if (file.downloaders && file.downloaders[peerId]) {
+                            file.downloaders[peerId].status = 'completed';
+                            file.downloaders[peerId].completedTime = Date.now();
+                            updateSenderFileStatus(fileId, file.downloaders);
+                        }
+                        return;
+                    }
+
+                    // to prevent overwhelming the channel
+                    setTimeout(() => {
+                        sending = false;
+                        processQueue();
+                    }, 0);
+
+                    // Queue more chunks if needed
+                    queueNextChunks();
+                } catch (error) {
+                    //console.error(`Error sending chunk ${index}:`, error);
+
+                    if (error.message && error.message.includes('send queue is full')) {
+                        // Put the chunk back in the queue for retry
+                        chunkQueue.unshift(index);
+                        activeTransfers--;
+
+                        // Wait longer before retrying
+                        setTimeout(() => {
+                            sending = false;
+                            processQueue();
+                        }, 200);
+                    } else {
+                        // For other errors, wait a bit and retry
+                        sentChunks.delete(index);
+                        activeTransfers--;
+                        setTimeout(() => {
+                            sending = false;
+                            chunkQueue.unshift(index);
+                            processQueue();
+                        }, 1000);
                     }
                 }
             } catch (error) {
-                console.error(`Error sending chunk ${index}:`, error);
-                // Remove from sent set so we can retry
+                //console.error(`Error processing chunk ${index}:`, error);
                 sentChunks.delete(index);
                 activeTransfers--;
-
-                // Retry after a delay
-                setTimeout(() => sendChunk(index), 500);
+                setTimeout(() => {
+                    sending = false;
+                    chunkQueue.unshift(index);
+                    processQueue();
+                }, 1000);
             }
         };
 
         reader.onerror = (error) => {
-            console.error(`Error reading chunk ${index}:`, error);
+            //console.error(`Error reading chunk ${index}:`, error);
             sentChunks.delete(index);
             activeTransfers--;
-            setTimeout(() => sendChunk(index), 1000);
+            setTimeout(() => {
+                sending = false;
+                chunkQueue.unshift(index);
+                processQueue();
+            }, 1000);
         };
 
         reader.readAsArrayBuffer(chunk);
     }
 
-    // Start initial transfers
-    for (let i = 0; i < Math.min(maxParallel, totalChunks); i++) {
-        sendChunk(i);
+    // Function to queue chunks for sending
+    function queueNextChunks() {
+        // Only queue chunks if we're under the parallel limit and there are chunks left
+        while (activeTransfers < maxParallel && chunkQueue.length < maxParallel * 4) {
+            // Find next unsent chunk
+            let nextIndex = 0;
+            while (nextIndex < totalChunks && (sentChunks.has(nextIndex) || chunkQueue.includes(nextIndex))) {
+                nextIndex++;
+            }
+
+            if (nextIndex < totalChunks) {
+                sentChunks.add(nextIndex);
+                chunkQueue.push(nextIndex);
+                activeTransfers++;
+            } else {
+                break; // No more chunks to queue
+            }
+        }
+
+        // Start processing if not already processing
+        if (!sending && chunkQueue.length > 0) {
+            processQueue();
+        }
     }
+
+    // Start the transfer process
+    queueNextChunks();
 }
