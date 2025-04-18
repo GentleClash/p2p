@@ -2,3 +2,4 @@
 1. Connection establishment problem - Auto refresh until connected
 2. Auto refresh will remove the files list
 3. No identification for sender of the list once refreshed.
+4. File names need more sanitization
