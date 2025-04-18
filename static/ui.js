@@ -87,19 +87,19 @@ export function updateFileDownloadStatus(fileId, statusText) {
     }
 
     let statusElement = fileItem.querySelector(`#status-${fileId}`) || fileItem.querySelector('.file-status');
-if (!statusElement) {
-    const fileInfo = fileItem.querySelector('.file-info');
-    if (!fileInfo) {
-        console.error(`Could not find .file-info for ${fileId}`);
-        return;
+    if (!statusElement) {
+        const fileInfo = fileItem.querySelector('.file-info');
+        if (!fileInfo) {
+            console.error(`Could not find .file-info for ${fileId}`);
+            return;
+        }
+        statusElement = document.createElement('span');
+        statusElement.className = 'file-status';
+        statusElement.id = `status-${fileId}`;
+        fileInfo.appendChild(statusElement);
+    } else if (!statusElement.id) {
+        statusElement.id = `status-${fileId}`;
     }
-    statusElement = document.createElement('span');
-    statusElement.className = 'file-status';
-    statusElement.id = `status-${fileId}`;
-    fileInfo.appendChild(statusElement);
-} else if (!statusElement.id) {
-    statusElement.id = `status-${fileId}`;
-}
 
     // Update the status text
     statusElement.textContent = statusText;
@@ -117,15 +117,32 @@ if (!statusElement) {
             const fileInfo = fileItem.querySelector('.file-info');
             progressBar = document.createElement('div');
             progressBar.className = 'progress-bar';
-            progressBar.innerHTML = '<div class="progress-fill"></div>';
+            progressBar.innerHTML = `
+                <div class="progress-fill-bg"></div>
+                <div class="progress-fill"></div>
+                <div class="progress-text">0%</div>
+            `;
+
+
+
             fileInfo.appendChild(progressBar);
         }
 
-        // Update progress fill
+        const progressFillBg = progressBar.querySelector('.progress-fill-bg');
         const progressFill = progressBar.querySelector('.progress-fill');
-        if (progressFill) {
-            progressFill.style.width = `${percentage}%`;
+        const progressText = progressBar.querySelector('.progress-text');
+
+        if (progressFillBg) {
+            progressFillBg.style.width = `${percentage}%`;
         }
+        if (progressFill) {
+            progressFill.style.left = `calc(${percentage}% - 20px)`; 
+        }
+        if (progressText) {
+            progressText.textContent = `${percentage}%`;
+        }
+
+
 
         // Update status text to include percentage
         statusElement.textContent = `${statusText} (${percentage}%)`;

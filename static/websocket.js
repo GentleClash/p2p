@@ -25,6 +25,9 @@ export function initWebSocket() {
 
     socket.on('room_peers', (data) => {
         console.log("Room peers:", data.peers);
+        if (!myPeerId && data.peers.length==1){
+            myPeerId = data.peers[0];
+        }
         updatePeersList(data.peers);
         // Initiate connections to other peers
         data.peers.forEach(peerId => {

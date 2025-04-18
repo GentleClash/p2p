@@ -5,6 +5,7 @@ import { initWebSocket } from './websocket.js';
 
 export async function init() {
     console.log("Initializing...");
+    initWebSocket();
 
     try {
 
@@ -89,7 +90,6 @@ export async function init() {
         console.error("Initialization error:", error);
         updateStatus(`Error: ${error.message}`);
     }
-    initWebSocket();
 }
 
 export function updateStatus(message) {

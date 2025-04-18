@@ -4,7 +4,7 @@ import { showToast, updatePeersList } from "./ui.js";
 import { handleFileData, handleFileList, handleFileRequest, sendFileList} from "./file_transfer.js";
 
 export function initializePeerConnection(peerId) {
-    if (peers[peerId] && peers[peerId].connection) {
+    if (peers[peerId] && (peers[peerId].connection || peers[peerId].connectionState === 'connected')) {
         console.log(`Connection with peer ${peerId} already exists`);
         return peers[peerId].connection;
     }
@@ -14,7 +14,7 @@ export function initializePeerConnection(peerId) {
 
     const peer = new SimplePeer({
         initiator: myPeerId < peerId,
-        trickle: false
+        trickle: true
     });
 
     peers[peerId] = {
@@ -105,13 +105,13 @@ export function initializePeerConnection(peerId) {
 }
 
 export function handleSignal(signal) {
-    if (!signal || !signal.from) {
+    if (!signal || !signal.from || !signal.signal) {
         console.error("Received invalid signal data", signal);
         return;
     }
 
     const fromPeerId = signal.from;
-    const signalData = signal.data || signal.signal; // Handle different formats
+    const signalData = signal.signal; // Handle different formats
 
     console.log(`Received signal from peer: ${fromPeerId}`, signalData);
 
