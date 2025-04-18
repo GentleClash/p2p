@@ -106,8 +106,11 @@ async def join_room(request: Request, room_id: str):
     """Join an existing room"""
     logger.info(f"Attempting to join room: {room_id}")
     if room_id not in rooms:
-        logger.warning(f"Room {room_id} not found")
-        return templates.TemplateResponse("error.html", {"request": request, "message": "Room not found. Please check the room code."}), 404
+        return templates.TemplateResponse(
+        "error.html", 
+        {"request": request, "message": "Room not found. Please check the room code."}, 
+        status_code=404
+    )
     try:
         logger.info(f"Rendering room.html for room: {room_id}")
         return templates.TemplateResponse("room.html", {"request": request, "room_id": room_id})
@@ -115,10 +118,6 @@ async def join_room(request: Request, room_id: str):
         logger.error(f"Error rendering room.html: {str(e)}")
         return templates.TemplateResponse("error.html", {"request": request, "message": "An error occurred while loading the room."}), 500
 
-@app.get("/join-room")
-async def join_room_get(request: Request):
-    """Render the room join page"""
-    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/status")
 async def status():

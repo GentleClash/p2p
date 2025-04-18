@@ -1,7 +1,7 @@
 import { requestFileFromPeer } from "./file_transfer.js";
 import { getPeerIdFromFileId } from "./utility.js";
 
-export function addFileToUI(fileId, fileName, url, fileSize, ownedByMe = true) {
+export function addFileToUI(fileId, fileName, url, fileSize, ownedByMe = true, downloaders = {}) {
     const fileList = document.getElementById('fileList');
     const existingItem = document.querySelector(`#fileList li[data-file-id="${fileId}"]`);
     if (existingItem) {
@@ -19,8 +19,11 @@ export function addFileToUI(fileId, fileName, url, fileSize, ownedByMe = true) {
         // Update the status if it exists
         const statusElement = existingItem.querySelector('.file-status');
         if (statusElement) {
-            statusElement.id = `status-${fileId}`; // Ensure it has the correct ID
+            statusElement.id = `status-${fileId}`; 
             statusElement.textContent = 'Ready to download';
+        }
+        if (ownedByMe && Object.keys(downloaders).length > 0) {
+            updateSenderFileStatus(fileId, downloaders);
         }
 
         return;
@@ -43,9 +46,13 @@ export function addFileToUI(fileId, fileName, url, fileSize, ownedByMe = true) {
                         <span class="file-name">${fileName}</span>
                         <span class="file-meta">Size: ${displaySize}</span>
                         <span class="file-status">Your file</span>
+                        <div class="downloaders-status" id="downloaders-${fileId}"></div>
                     </div>
                     <a href="${url}" download="${fileName}" class="download-btn">Download</a>
                 `;
+        if (Object.keys(downloaders).length > 0) {
+            updateSenderFileStatus(fileId, downloaders);
+        }
     } else {
         // For files from peers
         listItem.innerHTML = `
@@ -77,6 +84,104 @@ export function addFileToUI(fileId, fileName, url, fileSize, ownedByMe = true) {
     }
 }
 
+export function updateSenderFileStatus(fileId, downloaders) {
+    let downloadersContainer = document.getElementById(`downloaders-${fileId}`);
+    
+    // If not found, add it
+    if (!downloadersContainer) {
+        const fileItem = document.querySelector(`li[data-file-id="${fileId}"]`);
+        if (!fileItem) return;
+        
+        // Find or create the file-info section
+        let fileInfo = fileItem.querySelector('.file-info');
+        if (!fileInfo) {
+            fileInfo = document.createElement('div');
+            fileInfo.className = 'file-info';
+            fileItem.appendChild(fileInfo);
+        }
+        
+        // Create downloaders container
+        downloadersContainer = document.createElement('div');
+        downloadersContainer.className = 'downloaders-status';
+        downloadersContainer.id = `downloaders-${fileId}`;
+        fileInfo.appendChild(downloadersContainer);
+    }
+    
+    // Clear and rebuild the list
+    downloadersContainer.innerHTML = '';
+    
+    // Get active downloaders
+    const activeDownloaders = Object.keys(downloaders).filter(id => 
+        downloaders[id].status === 'downloading' || 
+        downloaders[id].status === 'starting' ||
+        (downloaders[id].status === 'completed' && 
+         Date.now() - downloaders[id].completedTime < 10000) // Show completed for 10 seconds
+    );
+    
+    if (activeDownloaders.length === 0) {
+        downloadersContainer.style.display = 'none';
+        return;
+    }
+    
+    downloadersContainer.style.display = 'block';
+    
+    // Create header if there are downloaders
+    if (activeDownloaders.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'downloaders-header';
+        header.textContent = 'Current Downloads:';
+        downloadersContainer.appendChild(header);
+    }
+    
+    // Add each downloader
+    activeDownloaders.forEach(peerId => {
+        const downloader = downloaders[peerId];
+        const downloaderEl = document.createElement('div');
+        downloaderEl.className = 'downloader-item';
+        
+        // Create status text based on state
+        let statusText = '';
+        let statusClass = '';
+        
+        switch (downloader.status) {
+            case 'starting':
+                statusText = `Peer ${peerId}: Preparing transfer...`;
+                statusClass = 'status-pending';
+                break;
+            case 'downloading':
+                statusText = `Peer ${peerId}: ${downloader.progress || 0}% Complete`;
+                statusClass = 'status-downloading';
+                break;
+            case 'completed':
+                statusText = `Peer ${peerId}: Download Complete`;
+                statusClass = 'status-completed';
+                break;
+            case 'error':
+                statusText = `Peer ${peerId}: Error - ${downloader.error || 'Unknown error'}`;
+                statusClass = 'status-error';
+                break;
+            default:
+                statusText = `Peer ${peerId}: ${downloader.status}`;
+        }
+        
+        downloaderEl.innerHTML = `
+            <span class="downloader-status ${statusClass}">${statusText}</span>
+        `;
+        
+        // Add progress bar for downloading status
+        if (downloader.status === 'downloading' && typeof downloader.progress === 'number') {
+            const progressBar = document.createElement('div');
+            progressBar.className = 'downloader-progress';
+            progressBar.innerHTML = `
+                <div class="downloader-progress-bar" style="width: ${downloader.progress}%;"></div>
+            `;
+            downloaderEl.appendChild(progressBar);
+        }
+        
+        downloadersContainer.appendChild(downloaderEl);
+    });
+}
+
 
 export function updateFileDownloadStatus(fileId, statusText) {
 
@@ -87,19 +192,19 @@ export function updateFileDownloadStatus(fileId, statusText) {
     }
 
     let statusElement = fileItem.querySelector(`#status-${fileId}`) || fileItem.querySelector('.file-status');
-if (!statusElement) {
-    const fileInfo = fileItem.querySelector('.file-info');
-    if (!fileInfo) {
-        console.error(`Could not find .file-info for ${fileId}`);
-        return;
+    if (!statusElement) {
+        const fileInfo = fileItem.querySelector('.file-info');
+        if (!fileInfo) {
+            console.error(`Could not find .file-info for ${fileId}`);
+            return;
+        }
+        statusElement = document.createElement('span');
+        statusElement.className = 'file-status';
+        statusElement.id = `status-${fileId}`;
+        fileInfo.appendChild(statusElement);
+    } else if (!statusElement.id) {
+        statusElement.id = `status-${fileId}`;
     }
-    statusElement = document.createElement('span');
-    statusElement.className = 'file-status';
-    statusElement.id = `status-${fileId}`;
-    fileInfo.appendChild(statusElement);
-} else if (!statusElement.id) {
-    statusElement.id = `status-${fileId}`;
-}
 
     // Update the status text
     statusElement.textContent = statusText;
@@ -117,15 +222,32 @@ if (!statusElement) {
             const fileInfo = fileItem.querySelector('.file-info');
             progressBar = document.createElement('div');
             progressBar.className = 'progress-bar';
-            progressBar.innerHTML = '<div class="progress-fill"></div>';
+            progressBar.innerHTML = `
+                <div class="progress-fill-bg"></div>
+                <div class="progress-fill"></div>
+                <div class="progress-text">0%</div>
+            `;
+
+
+
             fileInfo.appendChild(progressBar);
         }
 
-        // Update progress fill
+        const progressFillBg = progressBar.querySelector('.progress-fill-bg');
         const progressFill = progressBar.querySelector('.progress-fill');
-        if (progressFill) {
-            progressFill.style.width = `${percentage}%`;
+        const progressText = progressBar.querySelector('.progress-text');
+
+        if (progressFillBg) {
+            progressFillBg.style.width = `${percentage}%`;
         }
+        if (progressFill) {
+            progressFill.style.left = `calc(${percentage}% - 20px)`; 
+        }
+        if (progressText) {
+            progressText.textContent = `${percentage}%`;
+        }
+
+
 
         // Update status text to include percentage
         statusElement.textContent = `${statusText} (${percentage}%)`;
@@ -195,4 +317,69 @@ export function updatePeersList(peersList = Object.keys(peers)) {
                 `;
         peersListElement.appendChild(listItem);
     });
+}
+
+
+export function initDebugConsole() {
+    // Create debug console container
+    const debugConsole = document.createElement('div');
+    debugConsole.id = 'debugConsole';
+    debugConsole.style.cssText = 'position: fixed; bottom: 0; left: 0; width: 100%; height: 200px; background: rgba(0,0,0,0.8); color: white; font-family: monospace; overflow-y: auto; z-index: 1000; padding: 10px; display: none;';
+    document.body.appendChild(debugConsole);
+    
+    // Create toggle button
+    const toggleBtn = document.createElement('button');
+    toggleBtn.textContent = 'Debug Console';
+    toggleBtn.style.cssText = 'position: fixed; bottom: 10px; right: 10px; z-index: 1001; padding: 5px 10px;';
+    document.body.appendChild(toggleBtn);
+    
+    // Toggle console visibility
+    toggleBtn.addEventListener('click', () => {
+        debugConsole.style.display = debugConsole.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    // Override console methods
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+    
+    function addToDebugConsole(type, ...args) {
+        const line = document.createElement('div');
+        line.className = `debug-${type}`;
+        line.style.borderBottom = '1px solid #333';
+        line.style.padding = '2px 0';
+        line.style.color = type === 'error' ? '#ff5555' : type === 'warn' ? '#ffaa00' : '#ffffff';
+        
+        let message = '';
+        args.forEach(arg => {
+            if (typeof arg === 'object') {
+                try {
+                    message += JSON.stringify(arg) + ' ';
+                } catch (e) {
+                    message += '[Object] ';
+                }
+            } else {
+                message += arg + ' ';
+            }
+        });
+        
+        line.textContent = `${type.toUpperCase()}: ${message}`;
+        debugConsole.appendChild(line);
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+    }
+    
+    console.log = function(...args) {
+        originalLog.apply(console, args);
+        addToDebugConsole('log', ...args);
+    };
+    
+    console.error = function(...args) {
+        originalError.apply(console, args);
+        addToDebugConsole('error', ...args);
+    };
+    
+    console.warn = function(...args) {
+        originalWarn.apply(console, args);
+        addToDebugConsole('warn', ...args);
+    };
 }

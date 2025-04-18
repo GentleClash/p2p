@@ -1,10 +1,12 @@
 import { handleFiles } from './file_transfer.js';
-import { showToast } from './ui.js';
+import { showToast, initDebugConsole } from './ui.js';
 import { initWebSocket } from './websocket.js';
 
 
 export async function init() {
     console.log("Initializing...");
+    initWebSocket();
+    //initDebugConsole();
 
     try {
 
@@ -78,32 +80,17 @@ export async function init() {
                 }, 2000);
             }
         });
+    
+            popupCopyBtn.addEventListener('click', function() {
+              popupShareLink.select();
+              document.execCommand('copy');
+              showToast('Link copied to clipboard!');
+            });
 
     } catch (error) {
         console.error("Initialization error:", error);
         updateStatus(`Error: ${error.message}`);
     }
-    document.getElementById('shareLink').value = window.location.href;
-    document.getElementById('shareLinkBtn').addEventListener('click', () => {
-        const shareLink = document.getElementById('shareLink');
-        shareLink.select();
-        try {
-            navigator.clipboard.writeText(shareLink.value)
-                .then(() => showToast('Link copied to clipboard!'))
-                .catch(err => {
-                    console.error("Failed to copy link:", err);
-                    // Fallback method
-                    document.execCommand('copy');
-                    showToast('Link copied to clipboard!');
-                });
-        } catch (error) {
-            console.error("Error copying link:", error);
-            // Fallback for browsers without clipboard API
-            document.execCommand('copy');
-            showToast('Link copied to clipboard!');
-        }
-    });
-    initWebSocket();
 }
 
 export function updateStatus(message) {

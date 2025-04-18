@@ -25,13 +25,24 @@ export function initWebSocket() {
 
     socket.on('room_peers', (data) => {
         console.log("Room peers:", data.peers);
+        if (!myPeerId && data.peers.length==1){
+            myPeerId = data.peers[0];
+        }
         updatePeersList(data.peers);
         // Initiate connections to other peers
-        data.peers.forEach(peerId => {
-            if (peerId !== myPeerId && !peers[peerId]) {
-                initializePeerConnection(peerId);
-            }
-        });
+        setTimeout(() => {
+            // Initiate connections to other peers - but only if we're not already connected
+            data.peers.forEach(peerId => {
+                if (peerId !== myPeerId) {
+                    if (!peers[peerId] || peers[peerId].state!== CONNECTION_STATES.CONNECTED) {
+                        console.log(`Initiating connection to peer ${peerId} from room_peers event`);
+                        initializePeerConnection(peerId);
+                    } else {
+                        console.log(`Already connected to peer ${peerId}`);
+                    }
+                }
+            });
+        }, 0);
     });
 
     socket.on('peer_joined', (data) => {
